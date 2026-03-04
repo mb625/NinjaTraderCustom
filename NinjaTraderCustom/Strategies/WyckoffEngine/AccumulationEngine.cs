@@ -1,68 +1,31 @@
-public class AccumulationEngine : IWyckoffStructureEngine
+using System.Windows.Media;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.DrawingTools;
+
+public class AccumulationEngine : BaseWyckoffEngine
 {
-    private const string arLineTag = "AR_LINE_ACC";
-    private const string structureLineTag = "STRUCTURE_LINE_ACC";
-    private readonly Strategy strategy;
+    public override StructureDirection Direction => StructureDirection.Accumulation;
 
-    public StructureDirection Direction => StructureDirection.Accumulation;
-    public StructurePhase Phase { get; private set; }
-
-    public bool IsActive => Phase != StructurePhase.Searching;
-
-    // === Structure Variables (moved from strategy) ===
-    private double candidateScLow;
-    private int candidateScBar;
-
-    private double arHigh;
-    private double arHighLocked;
-    private bool arDisplacementReached;
-
-    private double stLow;
-    private double structureLow;
-
-    private bool sosTriggered;
-
-    private int lpsAttempts;
-    private double attempt1RetraceLow;
-    private bool retraceReadyForAttempt2;
-
-    private bool rangeDefined;
-    private double lastRangeLow;
-    public bool IsTrendContext { get; private set; }
-public bool IsInTradePhase => Phase == StructurePhase.InTrade;
+    private const string tagPrefix = "ACC_";
 
     public AccumulationEngine(Strategy strategy)
+        : base(strategy)
     {
-        this.strategy = strategy;
-        Reset();
     }
 
-    public void Reset()
+    // =========================================================
+    // CLIMAX (SC)
+    // =========================================================
+
+    protected override bool DetectClimax()
     {
-        candidateScLow = double.MaxValue;
-        candidateScBar = -1;
-
-        arHigh = double.MinValue;
-        arHighLocked = 0;
-        arDisplacementReached = false;
-
-        stLow = 0;
-        structureLow = 0;
-        strategy.RemoveDrawObject(arLineTag);
-        strategy.RemoveDrawObject(structureLineTag);
-
-        sosTriggered = false;
-        lpsAttempts = 0;
-        rangeDefined = false;
-
-        Phase = StructurePhase.Searching;
-    }
-
-    private void SearchForSC()
-    {
+        DrawPhaseLabel();
         bool sweep = strategy.Low[0] < strategy.MIN(strategy.Low, 20)[1];
 
         double range = strategy.High[0] - strategy.Low[0];
+        if (range <= 0)
+            return false;
+
         double avgRange =
             strategy.SMA(strategy.High, 20)[0] -
             strategy.SMA(strategy.Low, 20)[0];
@@ -72,117 +35,297 @@ public bool IsInTradePhase => Phase == StructurePhase.InTrade;
 
         if (sweep && expansion && rejection)
         {
-            candidateScLow = strategy.Low[0];
-            candidateScBar = strategy.CurrentBar;
+            candidateExtreme = strategy.Low[0];
+            candidateBar = strategy.CurrentBar;
 
-            arHigh = strategy.High[0];
-            arDisplacementReached = false;
+            arExtreme = strategy.High[0];
 
-            Phase = StructurePhase.TrackingAR;
+            DrawDot("SC", candidateExtreme, Brushes.Cyan);
+            DrawLabel("SC", "SC", candidateExtreme - strategy.TickSize * 4, Brushes.Cyan);
 
-            strategy.Print("SC DETECTED");
+            return true;
         }
+
+        return false;
     }
 
-    private void TrackARUp()
+    // =========================================================
+    // AR TRACKING
+    // =========================================================
+
+    protected override void TrackAR()
     {
-        if (strategy.High[0] > arHigh)
-            arHigh = strategy.High[0];
+        DrawPhaseLabel();
+        if (strategy.High[0] > arExtreme)
+            arExtreme = strategy.High[0];
 
         if (!arDisplacementReached &&
-            arHigh >= candidateScLow + 6.0 &&
-            strategy.CurrentBar > candidateScBar)
+            arExtreme >= candidateExtreme + 6.0)
         {
             arDisplacementReached = true;
-            strategy.Print("AR DISPLACEMENT REACHED");
         }
 
         if (arDisplacementReached)
             CheckForST();
     }
 
-    private void CheckForST()
+    protected override void CheckForST()
     {
-        double range = arHigh - candidateScLow;
-        double retraceLevel = arHigh - (range * 0.618);
+        double range = arExtreme - candidateExtreme;
+        double retraceLevel = arExtreme - (range * 0.618);
 
         if (strategy.Low[0] <= retraceLevel)
         {
-            stLow = strategy.Low[0];
+            stExtreme = strategy.Low[0];
+            structureExtreme = System.Math.Min(candidateExtreme, stExtreme);
+            arLocked = arExtreme;
 
-            if (stLow < candidateScLow - 3.0)
-            {
-                Reset();
-                return;
-            }
-
-            structureLow = Math.Min(candidateScLow, stLow);
-            arHighLocked = arHigh;
+            DrawHorizontal("STRUCTURE_LOW", structureExtreme, Brushes.Red);
+            DrawHorizontal("AR_HIGH", arLocked, Brushes.Goldenrod);
+            DrawLabel("AR", "AR", arLocked + strategy.TickSize * 4, Brushes.Goldenrod);
+            DrawLabel("ST", "ST", stExtreme - strategy.TickSize * 4, Brushes.Magenta);
 
             Phase = StructurePhase.WaitingForBreak;
-
-            strategy.Print("AR CONFIRMED");
         }
     }
 
-    private void CheckSOS()
-    {
-        if (!sosTriggered &&
-            strategy.High[0] > arHighLocked)
-        {
-            sosTriggered = true;
-            Phase = StructurePhase.WaitingForLPS;
+    // =========================================================
+    // PRE-SOS RANGE LOW LOCK
+    // =========================================================
 
-            strategy.Print("SOS CONFIRMED");
-        }
-    }
-
-    private void CheckLPS()
+    protected override void TrackPreSosRangeExtreme()
     {
-        if (!rangeDefined)
+        DrawPhaseLabel();
+        if (rangeExtremeLocked)
             return;
 
+        if (strategy.CrossBelow(strategy.EMA(9), strategy.EMA(21), 1))
+        {
+            phaseRangeExtreme = strategy.MIN(strategy.Low, 10)[0];
+            rangeExtremeLocked = true;
+
+            DrawHorizontal("RANGE_LOW", phaseRangeExtreme, Brushes.DodgerBlue);
+        }
+    }
+
+    // =========================================================
+    // SOS (BOS)
+    // =========================================================
+
+    protected override void CheckSOS()
+    {
+        DrawPhaseLabel();
+        if (!sosTriggered &&
+            strategy.High[0] > arLocked)
+        {
+            sosTriggered = true;
+            sosExtreme = strategy.High[0];
+
+            double fullRange = sosExtreme - phaseRangeExtreme;
+
+            discountLevel = sosExtreme - (fullRange * 0.62);
+            deepDiscountLevel = sosExtreme - (fullRange * 0.786);
+
+            rangeLocked = true;
+
+            DrawHorizontal("SOS_HIGH", sosExtreme, Brushes.LimeGreen);
+            DrawHorizontal("DISC_62", discountLevel, Brushes.Gray);
+            DrawHorizontal("DISC_786", deepDiscountLevel, Brushes.DarkGray);
+            DrawLabel("SOS", "SOS", sosExtreme + strategy.TickSize * 4, Brushes.LimeGreen);
+
+            DrawBOSArrow();
+            DrawTradingRange();
+
+            Phase = StructurePhase.WaitingForLPS;
+        }
+    }
+
+    // =========================================================
+    // ENTRY SIGNAL
+    // =========================================================
+
+    protected override bool EntrySignal()
+    {
         bool holdsStructure =
-            strategy.Low[0] > structureLow - 3.0;
+            strategy.Low[0] > phaseRangeExtreme - 3.0;
 
         bool bullishEngulfing =
             strategy.Close[0] > strategy.Open[0] &&
             strategy.Close[1] < strategy.Open[1] &&
-            strategy.Close[0] >= strategy.Open[1] &&
-            strategy.Open[0] <= strategy.Close[1];
+            strategy.Close[0] >= strategy.Open[1];
 
-        if (holdsStructure && bullishEngulfing)
-        {
-            ExecuteTrade();
-        }
+        bool emaCrossUp =
+            strategy.CrossAbove(strategy.EMA(9), strategy.EMA(21), 1);
+
+        if (lpsAttempts == 0)
+            return strategy.Close[0] <= discountLevel &&
+                   holdsStructure &&
+                   bullishEngulfing &&
+                   emaCrossUp;
+
+        if (lpsAttempts == 1 && fullStopOutOccurred)
+            return strategy.Low[0] <= deepDiscountLevel &&
+                   holdsStructure &&
+                   bullishEngulfing &&
+                   emaCrossUp;
+
+        return false;
     }
 
-    public void ExecuteTrade()
+    protected override bool StructureInvalidated()
     {
-        strategy.EnterLong(1, "LPS_T1");
-        strategy.EnterLong(1, "LPS_T2");
-
-        Phase = StructurePhase.InTrade;
+        return strategy.Low[0] < structureExtreme - 3.0;
     }
 
-    public void ProcessBar()
+    protected override void ExecuteTrade()
     {
+        DrawPhaseLabel();
+        strategy.EnterLong(1, "CORE_T1");
+        strategy.EnterLong(1, "CORE_T2");
+
+        DrawDot("ENTRY", strategy.Close[0], Brushes.Lime);
+        DrawLabel("LPS", "LPS", strategy.Close[0] - strategy.TickSize * 6, Brushes.Lime);
+    }
+
+    // =========================================================
+    // DRAW HELPERS
+    // =========================================================
+
+    private void DrawHorizontal(string name, double price, Brush brush)
+    {
+        string tag = tagPrefix + name;
+
+        strategy.Draw.HorizontalLine(
+            strategy,
+            tag,
+            false,
+            price,
+            brush
+        );
+    }
+
+    private void DrawDot(string name, double price, Brush brush)
+    {
+        string tag = tagPrefix + name + "_" + strategy.CurrentBar;
+
+        strategy.Draw.Dot(
+            strategy,
+            tag,
+            false,
+            0,
+            price,
+            brush
+        );
+    }
+
+    private void DrawBOSArrow()
+    {
+        string tag = tagPrefix + "BOS_" + strategy.CurrentBar;
+
+        double arrowPrice = strategy.Low[0] - strategy.TickSize * 4;
+
+        strategy.Draw.ArrowUp(
+            strategy,
+            tag,
+            false,
+            0,
+            arrowPrice,
+            Brushes.LimeGreen
+        );
+
+        strategy.Draw.Text(
+            strategy,
+            tag + "_TXT",
+            false,
+            "BOS",
+            0,
+            arrowPrice - strategy.TickSize * 3,
+            0,
+            Brushes.LimeGreen
+        );
+    }
+
+    private void DrawTradingRange()
+    {
+        string tag = tagPrefix + "TR_BOX";
+
+        int startBarsAgo = 20;   // width of the box
+        int endBarsAgo = 0;
+
+        strategy.Draw.Rectangle(
+            strategy,
+            tag,
+            false,
+            startBarsAgo,
+            sosExtreme,
+            endBarsAgo,
+            phaseRangeExtreme,
+            Brushes.Transparent,
+            Brushes.DarkSlateBlue,
+            2
+        );
+    }
+
+    private void DrawPhaseShading()
+    {
+        string tag = tagPrefix + "PHASE_BG";
+
+        Brush phaseBrush = Brushes.Transparent;
+
         switch (Phase)
         {
             case StructurePhase.Searching:
-                SearchForSC();
+                phaseBrush = Brushes.DarkRed;
                 break;
 
             case StructurePhase.TrackingAR:
-                TrackARUp();
+                phaseBrush = Brushes.Orange;
                 break;
 
             case StructurePhase.WaitingForBreak:
-                CheckSOS();
+                phaseBrush = Brushes.DodgerBlue;
                 break;
 
             case StructurePhase.WaitingForLPS:
-                CheckLPS();
+                phaseBrush = Brushes.MediumPurple;
+                break;
+
+            case StructurePhase.InTrade:
+                phaseBrush = Brushes.LimeGreen;
                 break;
         }
+
+        strategy.Draw.Rectangle(
+            strategy,
+            tag,
+            false,
+            50,                    // start bars ago
+            strategy.High[0] + 20, // top
+            0,                     // current bar
+            strategy.Low[0] - 20,  // bottom
+            Brushes.Transparent,
+            phaseBrush,
+            1
+        );
     }
+
+    private void DrawPhaseLabel()
+    {
+        DrawPhaseShading();
+        string tag = tagPrefix + "PHASE";
+
+        strategy.Draw.TextFixed(
+            strategy,
+            tag,
+            $"ACC Phase: {Phase}",
+            TextPosition.TopRight,
+            Brushes.White,
+            new NinjaTrader.Gui.Tools.SimpleFont("Arial", 14),
+            Brushes.Black,
+            Brushes.Black,
+            0
+        );
+    }
+
+
+}

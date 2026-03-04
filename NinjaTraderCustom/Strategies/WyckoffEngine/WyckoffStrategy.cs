@@ -56,7 +56,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 			Trend
 		}
 
-		
+
 
 		private string arLineTag = "AR_LINE";
 		private string structureLineTag = "STRUCTURE_LINE";
@@ -113,7 +113,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 	DateTime time)
 		{
 			if (execution.Order.OrderState != OrderState.Filled)
-                return;
+				return;
 
 			// ----------------------------
 			// Detect NEW ENTRY
