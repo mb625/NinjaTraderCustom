@@ -42,6 +42,10 @@ namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 		
 		private WyckoffState currentState = WyckoffState.SearchingForCandidateSC;
 		
+		private int completedTradeCycles = 0;
+		private DateTime cooldownEndTime = Core.Globals.MinDate;
+		private bool reEntryPending = false;
+		
 		private enum WyckoffState
 		{
 		    SearchingForCandidateSC,
@@ -98,19 +102,47 @@ namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 		    currentState = WyckoffState.SearchingForCandidateSC;
 		}
 		
-		protected override void OnExecutionUpdate(Execution execution, string executionId, double price, int quantity, 
-    MarketPosition marketPosition, string orderId, DateTime time)
+		protected override void OnExecutionUpdate(
+		    Execution execution,
+		    string executionId,
+		    double price,
+		    int quantity,
+		    MarketPosition marketPosition,
+		    string orderId,
+		    DateTime time)
 		{
 		    if (execution.Order.OrderState != OrderState.Filled)
 		        return;
-					
-			
+		
+		    // Detect profit target hit
+		    if (execution.Order.Name.Contains("Profit target"))
+		    {
+		        Print("PROFIT TARGET HIT");
+		
+		        if (completedTradeCycles == 0)
+		        {
+		            // First cycle completed → allow re-entry
+		            reEntryPending = true;
+		            completedTradeCycles = 1;
+		            Print("RE-ENTRY ENABLED");
+		        }
+		        else if (completedTradeCycles == 1)
+		        {
+		            // Second cycle complete → start cooldown
+		            cooldownEndTime = time.AddHours(1);
+		            completedTradeCycles = 2;
+		            Print("1 HOUR COOLDOWN STARTED");
+		        }
+		    }
 		}
 
         protected override void OnBarUpdate()
 		{
 		    if (CurrentBar < 50)
 		        return;
+			// Cooldown active?
+			if (Time[0] < cooldownEndTime)
+			    return;
 		
 		    // ================================
 		    //  HARD STRUCTURE INVALIDATION
@@ -271,7 +303,7 @@ namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 		            Close[0] >= Open[1] &&
 		            Open[0] <= Close[1];
 		
-		        if (holdsStructure && bullishEngulfing)
+		        if ((holdsStructure && bullishEngulfing) || reEntryPending)
 		        {
 		            double stopPrice = structureLow - 3.0;
 		            double target1 = Close[0] + 4.5;
@@ -290,6 +322,7 @@ namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 		            EnterLong(1, "LPS_T2");
 		            SetStopLoss("LPS_T2", CalculationMode.Price, stopPrice, false);
 		            SetProfitTarget("LPS_T2", CalculationMode.Price, target2);
+					reEntryPending = false;
 		
 		            currentState = WyckoffState.InTrade;
 		
