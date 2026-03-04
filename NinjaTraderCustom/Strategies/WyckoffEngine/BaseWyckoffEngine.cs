@@ -1,6 +1,10 @@
+using System;
+using System.Windows.Media;
+using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
+using NinjaTrader.NinjaScript.DrawingTools;
 
-namespace NinjaTrader.NinjaScript.Strategies
+namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 {
     public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
     {
@@ -13,175 +17,162 @@ namespace NinjaTrader.NinjaScript.Strategies
         public bool IsActive => Phase != StructurePhase.Searching;
         public bool IsInTradePhase => Phase == StructurePhase.InTrade;
 
+        // ==============================
+        // PHASE A STRUCTURE
+        // ==============================
+
+        protected double candidateExtreme;
+        protected int candidateBar;
+
+        protected double arExtreme;
+        protected double arLocked;
+        protected bool arDisplacementReached;
+
+        protected double stExtreme;
+        protected double structureExtreme;
+
+        // ==============================
+        // RANGE TRACKING
+        // ==============================
+
+        protected double phaseRangeExtreme;
+        protected bool rangeExtremeLocked;
+
+        protected bool sosTriggered;
+        protected double sosExtreme;
+
+        protected double discountLevel;
+        protected double deepDiscountLevel;
+        protected bool rangeLocked;
+
+        // ==============================
+        // REATTEMPT
+        // ==============================
+
+        protected int lpsAttempts;
+        protected const int maxLpsAttempts = 2;
+        protected bool fullStopOutOccurred;
+
         protected BaseWyckoffEngine(Strategy strategy)
         {
             this.strategy = strategy;
+            Reset();
         }
 
-        public abstract void Reset();
-
-        public abstract void ProcessBar();
-    }
-}
-
-
-    // ==============================
-    // PHASE A STRUCTURE
-    // ==============================
-
-    protected double candidateExtreme;
-    protected int candidateBar;
-
-    protected double arExtreme;
-    protected double arLocked;
-    protected bool arDisplacementReached;
-
-    protected double stExtreme;
-    protected double structureExtreme;
-
-    // ==============================
-    // RANGE TRACKING
-    // ==============================
-
-    protected double phaseRangeExtreme;
-    protected bool rangeExtremeLocked;
-
-    protected bool sosTriggered;
-    protected double sosExtreme;
-
-    protected double discountLevel;
-    protected double deepDiscountLevel;
-    protected bool rangeLocked;
-
-    // ==============================
-    // REATTEMPT
-    // ==============================
-
-    protected int lpsAttempts;
-    protected const int maxLpsAttempts = 2;
-    protected bool fullStopOutOccurred;
-
-    protected BaseWyckoffEngine(Strategy strategy)
-    {
-        this.strategy = strategy;
-        Reset();
-    }
-
-    public virtual void Reset()
-    {
-        candidateExtreme = 0;
-        candidateBar = -1;
-
-        arExtreme = 0;
-        arLocked = 0;
-        arDisplacementReached = false;
-
-        stExtreme = 0;
-        structureExtreme = 0;
-
-        phaseRangeExtreme = 0;
-        rangeExtremeLocked = false;
-
-        sosTriggered = false;
-        sosExtreme = 0;
-
-        discountLevel = 0;
-        deepDiscountLevel = 0;
-        rangeLocked = false;
-
-        lpsAttempts = 0;
-        fullStopOutOccurred = false;
-
-        Phase = StructurePhase.Searching;
-    }
-
-    // =========================================================
-    // ABSTRACT DIRECTION-SPECIFIC RULES
-    // =========================================================
-
-    protected abstract bool DetectClimax();
-    protected abstract void TrackAR();
-    protected abstract void CheckForST();
-    protected abstract void TrackPreSosRangeExtreme();
-    protected abstract void CheckSOS();
-    protected abstract bool EntrySignal();
-
-    protected abstract bool StructureInvalidated();
-
-    protected abstract void ExecuteTrade();
-
-    // =========================================================
-    // STOP OUT NOTIFICATION
-    // =========================================================
-
-    public void NotifyStopOut()
-    {
-        fullStopOutOccurred = true;
-        Phase = StructurePhase.WaitingForLPS;
-    }
-
-    // =========================================================
-    // MAIN PROCESS LOOP
-    // =========================================================
-
-    public void ProcessBar()
-    {
-        strategy.Print($"{strategy.Time[0]} {Direction} Phase: {Phase}");
-        DrawPhaseLabel();
-
-        switch (Phase)
+        public virtual void Reset()
         {
-            case StructurePhase.Searching:
-                if (DetectClimax())
-                    Phase = StructurePhase.TrackingAR;
-                break;
+            candidateExtreme = 0;
+            candidateBar = -1;
 
-            case StructurePhase.TrackingAR:
-                TrackAR();
-                break;
+            arExtreme = 0;
+            arLocked = 0;
+            arDisplacementReached = false;
 
-            case StructurePhase.WaitingForBreak:
-                TrackPreSosRangeExtreme();
-                CheckSOS();
-                break;
+            stExtreme = 0;
+            structureExtreme = 0;
 
-            case StructurePhase.WaitingForLPS:
-                if (EntrySignal())
-                    ExecuteTrade();
-                break;
+            phaseRangeExtreme = 0;
+            rangeExtremeLocked = false;
+
+            sosTriggered = false;
+            sosExtreme = 0;
+
+            discountLevel = 0;
+            deepDiscountLevel = 0;
+            rangeLocked = false;
+
+            lpsAttempts = 0;
+            fullStopOutOccurred = false;
+
+            Phase = StructurePhase.Searching;
         }
-    }
 
-    protected void DrawPhaseLabel()
-    {
-        Draw.Text(
-            strategy,
-            "phase" + strategy.CurrentBar + Direction,
-            $"{Direction} {Phase}",
-            0,
-            strategy.High[0] + strategy.TickSize * 10,
-            Brushes.White
-        );
-    }
+        // =========================================================
+        // ABSTRACT RULES
+        // =========================================================
 
-    // =========================================================
-    // SHARED LPS LOGIC (0.62 / 0.786)
-    // =========================================================
+        protected abstract bool DetectClimax();
+        protected abstract void TrackAR();
+        protected abstract void CheckForST();
+        protected abstract void TrackPreSosRangeExtreme();
+        protected abstract void CheckSOS();
+        protected abstract bool EntrySignal();
+        protected abstract bool StructureInvalidated();
+        protected abstract void ExecuteTrade();
 
-    private void CheckLPS()
-    {
-        if (!rangeLocked)
-            return;
+        // =========================================================
+        // STOP OUT
+        // =========================================================
 
-        if (lpsAttempts >= maxLpsAttempts)
-            return;
+        public void NotifyStopOut()
+        {
+            fullStopOutOccurred = true;
+            Phase = StructurePhase.WaitingForLPS;
+        }
 
-        if (!EntrySignal())
-            return;
+        // =========================================================
+        // MAIN PROCESS LOOP
+        // =========================================================
 
-        ExecuteTrade();
-        lpsAttempts++;
-        fullStopOutOccurred = false;
-        Phase = StructurePhase.InTrade;
+        public void ProcessBar()
+        {
+            strategy.Print($"{strategy.Time[0]} {Direction} Phase: {Phase}");
+
+            DrawPhaseLabel();
+
+            if (StructureInvalidated())
+            {
+                Reset();
+                return;
+            }
+
+            switch (Phase)
+            {
+                case StructurePhase.Searching:
+
+                    if (DetectClimax())
+                        Phase = StructurePhase.TrackingAR;
+
+                    break;
+
+                case StructurePhase.TrackingAR:
+
+                    TrackAR();
+                    break;
+
+                case StructurePhase.WaitingForBreak:
+
+                    TrackPreSosRangeExtreme();
+                    CheckSOS();
+                    break;
+
+                case StructurePhase.WaitingForLPS:
+
+                    if (EntrySignal())
+                    {
+                        ExecuteTrade();
+                        lpsAttempts++;
+                        Phase = StructurePhase.InTrade;
+                    }
+
+                    break;
+            }
+        }
+
+        // =========================================================
+        // PHASE LABEL
+        // =========================================================
+
+        protected void DrawPhaseLabel()
+        {
+            Draw.Text(
+                strategy,
+                "phase" + strategy.CurrentBar + Direction,
+                $"{Direction} {Phase}",
+                0,
+                strategy.High[0] + strategy.TickSize * 10,
+                Brushes.White
+            );
+        }
     }
 }

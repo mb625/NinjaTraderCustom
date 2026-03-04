@@ -1,5 +1,59 @@
 using NinjaTrader.NinjaScript.Strategies;
 
+namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
+{
+    public class StructureCoordinator
+    {
+        private readonly AccumulationEngine accumulation;
+        private readonly DistributionEngine distribution;
+
+        public enum StructureDirection
+        {
+            None,
+            Accumulation,
+            Distribution
+        }
+
+        public StructureDirection ActiveDirection { get; private set; }
+
+        public StructureCoordinator(Strategy strategy)
+        {
+            accumulation = new AccumulationEngine(strategy);
+            distribution = new DistributionEngine(strategy);
+
+            ActiveDirection = StructureDirection.None;
+        }
+
+        public void Reset()
+        {
+            accumulation.Reset();
+            distribution.Reset();
+
+            ActiveDirection = StructureDirection.None;
+        }
+
+        public void ProcessBar()
+        {
+            accumulation.ProcessBar();
+            distribution.ProcessBar();
+
+            if (accumulation.IsActive)
+                ActiveDirection = StructureDirection.Accumulation;
+            else if (distribution.IsActive)
+                ActiveDirection = StructureDirection.Distribution;
+            else
+                ActiveDirection = StructureDirection.None;
+        }
+
+        public bool IsInTradePhase()
+        {
+            return accumulation.IsInTradePhase || distribution.IsInTradePhase;
+        }
+    }
+}
+/*
+using NinjaTrader.NinjaScript.Strategies;
+
 namespace NinjaTrader.NinjaScript.Strategies
 {
     public class StructureCoordinator
@@ -67,4 +121,4 @@ namespace NinjaTrader.NinjaScript.Strategies
             ActiveDirection = StructureDirection.None;
         }
     }
-}
+    */

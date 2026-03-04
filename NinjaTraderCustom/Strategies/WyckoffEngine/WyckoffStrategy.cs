@@ -33,6 +33,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 		// ==========================
 		// SESSION GOVERNANCE
 		// ==========================
+		private ATR atr;
+		private double AtrMultiplier = 1.5;
 		private double dailyPnL = 0;
 		private double dailyProfitLimit = 2700;
 		private double dailyLossLimit = -900;
@@ -85,7 +87,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 		{
 			if (State == State.SetDefaults)
 			{
-				Name = "WyckoffStrategy_Prod";
+				Name = "WyckoffStrategy";
 				Calculate = Calculate.OnBarClose;
 
 				FastPeriod = 9;
@@ -98,7 +100,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 				accumulation = new AccumulationEngine(this);
 				distribution = new DistributionEngine(this);
 
-				coordinator = new StructureCoordinator(accumulation, distribution);
+				coordinator = new StructureCoordinator(this);
+				atr = ATR(14);
 			}
 		}
 
@@ -187,7 +190,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 			// ---------------------------
 			// Structure engine processing
 			// ---------------------------
-			coordinator.Process();
+			coordinator.ProcessBar();
 		}
 
 		private void HandleTrailingStops()

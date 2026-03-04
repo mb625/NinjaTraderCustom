@@ -1,4 +1,4 @@
-namespace NinjaTrader.NinjaScript.Strategies
+namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 {
     public enum StructureDirection
     {

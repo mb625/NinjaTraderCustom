@@ -1,3 +1,53 @@
+using System;
+using NinjaTrader.NinjaScript.Strategies;
+
+namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
+{
+    public class DistributionEngine : BaseWyckoffEngine
+    {
+        public override StructureDirection Direction => StructureDirection.Distribution;
+
+        public DistributionEngine(Strategy strategy) : base(strategy)
+        {
+        }
+
+        protected override bool DetectClimax()
+        {
+            return false;
+        }
+
+        protected override void TrackAR()
+        {
+        }
+
+        protected override void CheckForST()
+        {
+        }
+
+        protected override void TrackPreSosRangeExtreme()
+        {
+        }
+
+        protected override void CheckSOS()
+        {
+        }
+
+        protected override bool EntrySignal()
+        {
+            return false;
+        }
+
+        protected override bool StructureInvalidated()
+        {
+            return false;
+        }
+
+        protected override void ExecuteTrade()
+        {
+        }
+    }
+}
+/*
 using NinjaTrader.NinjaScript.Strategies;
 
 namespace NinjaTrader.NinjaScript.Strategies
@@ -416,3 +466,4 @@ namespace NinjaTrader.NinjaScript.Strategies
         }
     }
 }
+*/

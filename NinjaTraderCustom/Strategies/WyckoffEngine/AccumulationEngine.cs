@@ -3,8 +3,9 @@ using System.Windows.Media;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using NinjaTrader.NinjaScript.DrawingTools;
+using NinjaTrader.NinjaScript.Indicators;
 
-namespace NinjaTrader.NinjaScript.Strategies
+namespace NinjaTrader.NinjaScript.Strategies.WyckoffEngine
 {
     public class AccumulationEngine : BaseWyckoffEngine
     {
@@ -12,10 +13,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         private const string tagPrefix = "ACC_";
 
-        public AccumulationEngine(Strategy strategy)
-            : base(strategy)
-        {
-        }
+        public AccumulationEngine(Strategy strategy) : base(strategy) { }
 
         // =========================================================
         // CLIMAX (SC)
@@ -23,15 +21,15 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override bool DetectClimax()
         {
-            bool sweep = strategy.Low[0] < MIN(strategy.Low, 20)[1];
+            bool sweep = strategy.Low[0] < strategy.MIN(strategy.Low, 20)[1];
 
             double range = strategy.High[0] - strategy.Low[0];
             if (range <= 0)
                 return false;
 
             double avgRange =
-                SMA(strategy.High, 20)[0] -
-                SMA(strategy.Low, 20)[0];
+                strategy.SMA(strategy.High, 20)[0] -
+                strategy.SMA(strategy.Low, 20)[0];
 
             bool expansion = range > avgRange * 1.5;
             bool rejection = (strategy.Close[0] - strategy.Low[0]) / range >= 0.6;
@@ -61,11 +59,8 @@ namespace NinjaTrader.NinjaScript.Strategies
             if (strategy.High[0] > arExtreme)
                 arExtreme = strategy.High[0];
 
-            if (!arDisplacementReached &&
-                arExtreme >= candidateExtreme + 6.0)
-            {
+            if (!arDisplacementReached && arExtreme >= candidateExtreme + 6.0)
                 arDisplacementReached = true;
-            }
 
             if (arDisplacementReached)
                 CheckForST();
@@ -84,6 +79,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 
                 DrawHorizontal("STRUCTURE_LOW", structureExtreme, Brushes.Red);
                 DrawHorizontal("AR_HIGH", arLocked, Brushes.Goldenrod);
+
                 DrawLabel("AR", "AR", arLocked + strategy.TickSize * 4, Brushes.Goldenrod);
                 DrawLabel("ST", "ST", stExtreme - strategy.TickSize * 4, Brushes.Magenta);
 
@@ -92,7 +88,7 @@ namespace NinjaTrader.NinjaScript.Strategies
         }
 
         // =========================================================
-        // PRE-SOS RANGE LOW LOCK
+        // PRE SOS RANGE
         // =========================================================
 
         protected override void TrackPreSosRangeExtreme()
@@ -100,9 +96,9 @@ namespace NinjaTrader.NinjaScript.Strategies
             if (rangeExtremeLocked)
                 return;
 
-            if (CrossBelow(EMA(9), EMA(21), 1))
+            if (strategy.CrossBelow(strategy.EMA(9), strategy.EMA(21), 1))
             {
-                phaseRangeExtreme = MIN(strategy.Low, 10)[0];
+                phaseRangeExtreme = strategy.MIN(strategy.Low, 10)[0];
                 rangeExtremeLocked = true;
 
                 DrawHorizontal("RANGE_LOW", phaseRangeExtreme, Brushes.DodgerBlue);
@@ -110,13 +106,12 @@ namespace NinjaTrader.NinjaScript.Strategies
         }
 
         // =========================================================
-        // SOS (BOS)
+        // SOS
         // =========================================================
 
         protected override void CheckSOS()
         {
-            if (!sosTriggered &&
-                strategy.High[0] > arLocked)
+            if (!sosTriggered && strategy.High[0] > arLocked)
             {
                 sosTriggered = true;
                 sosExtreme = strategy.High[0];
@@ -131,6 +126,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 DrawHorizontal("SOS_HIGH", sosExtreme, Brushes.LimeGreen);
                 DrawHorizontal("DISC_62", discountLevel, Brushes.Gray);
                 DrawHorizontal("DISC_786", deepDiscountLevel, Brushes.DarkGray);
+
                 DrawLabel("SOS", "SOS", sosExtreme + strategy.TickSize * 4, Brushes.LimeGreen);
 
                 DrawBOSArrow();
@@ -141,7 +137,7 @@ namespace NinjaTrader.NinjaScript.Strategies
         }
 
         // =========================================================
-        // ENTRY SIGNAL
+        // ENTRY
         // =========================================================
 
         protected override bool EntrySignal()
@@ -155,7 +151,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 strategy.Close[0] >= strategy.Open[1];
 
             bool emaCrossUp =
-                CrossAbove(EMA(9), EMA(21), 1);
+                strategy.CrossAbove(strategy.EMA(9), strategy.EMA(21), 1);
 
             if (lpsAttempts == 0)
                 return strategy.Close[0] <= discountLevel &&
@@ -192,29 +188,12 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         private void DrawHorizontal(string name, double price, Brush brush)
         {
-            string tag = tagPrefix + name;
-
-            Draw.HorizontalLine(
-                strategy,
-                tag,
-                false,
-                price,
-                brush
-            );
+            Draw.HorizontalLine(strategy, tagPrefix + name, price, brush);
         }
 
         private void DrawDot(string name, double price, Brush brush)
         {
-            string tag = tagPrefix + name + "_" + strategy.CurrentBar;
-
-            Draw.Dot(
-                strategy,
-                tag,
-                false,
-                0,
-                price,
-                brush
-            );
+            Draw.Dot(strategy, tagPrefix + name + "_" + strategy.CurrentBar, false, 0, price, brush);
         }
 
         private void DrawLabel(string tag, string text, double price, Brush brush)
@@ -222,54 +201,25 @@ namespace NinjaTrader.NinjaScript.Strategies
             Draw.Text(
                 strategy,
                 tag + "_" + strategy.CurrentBar,
-                false,
                 text,
                 0,
                 price,
-                0,
-                brush,
-                new NinjaTrader.Gui.Tools.SimpleFont("Arial", 12),
-                TextAlignment.Center,
-                Brushes.Transparent,
-                Brushes.Transparent,
-                0
+                brush
             );
         }
 
         private void DrawBOSArrow()
         {
-            string tag = tagPrefix + "BOS_" + strategy.CurrentBar;
-
             double arrowPrice = strategy.Low[0] - strategy.TickSize * 4;
 
-            Draw.ArrowUp(
-                strategy,
-                tag,
-                false,
-                0,
-                arrowPrice,
-                Brushes.LimeGreen
-            );
-
-            Draw.Text(
-                strategy,
-                tag + "_TXT",
-                false,
-                "BOS",
-                0,
-                arrowPrice - strategy.TickSize * 3,
-                0,
-                Brushes.LimeGreen
-            );
+            Draw.ArrowUp(strategy, tagPrefix + "BOS_" + strategy.CurrentBar, false, 0, arrowPrice, Brushes.LimeGreen);
         }
 
         private void DrawTradingRange()
         {
-            string tag = tagPrefix + "TR_BOX";
-
             Draw.Rectangle(
                 strategy,
-                tag,
+                tagPrefix + "TR_BOX",
                 false,
                 20,
                 sosExtreme,
@@ -278,70 +228,6 @@ namespace NinjaTrader.NinjaScript.Strategies
                 Brushes.Transparent,
                 Brushes.DarkSlateBlue,
                 2
-            );
-        }
-
-        private void DrawPhaseShading()
-        {
-            string tag = tagPrefix + "PHASE_BG";
-
-            Brush phaseBrush = Brushes.Transparent;
-
-            switch (Phase)
-            {
-                case StructurePhase.Searching:
-                    phaseBrush = Brushes.DarkRed;
-                    break;
-
-                case StructurePhase.TrackingAR:
-                    phaseBrush = Brushes.Orange;
-                    break;
-
-                case StructurePhase.WaitingForBreak:
-                    phaseBrush = Brushes.DodgerBlue;
-                    break;
-
-                case StructurePhase.WaitingForLPS:
-                    phaseBrush = Brushes.MediumPurple;
-                    break;
-
-                case StructurePhase.InTrade:
-                    phaseBrush = Brushes.LimeGreen;
-                    break;
-            }
-
-            double top = MAX(strategy.High, 50)[0];
-            double bottom = MIN(strategy.Low, 50)[0];
-
-            Draw.Rectangle(
-                strategy,
-                tag,
-                false,
-                50,
-                top,
-                0,
-                bottom,
-                Brushes.Transparent,
-                phaseBrush,
-                1
-            );
-        }
-
-        private void DrawPhaseLabel()
-        {
-            string tag = tagPrefix + "PHASE";
-
-            Draw.TextFixed(
-                strategy,
-                tag,
-                $"ACC Phase: {Phase}",
-                TextPosition.TopRight,
-                Brushes.White,
-                new NinjaTrader.Gui.Tools.SimpleFont("Arial", 14),
-                Brushes.Black,
-                Brushes.Black,
-                0
-                
             );
         }
     }
