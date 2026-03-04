@@ -19,7 +19,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     protected override bool DetectClimax()
     {
-        DrawPhaseLabel();
         bool sweep = strategy.Low[0] < strategy.MIN(strategy.Low, 20)[1];
 
         double range = strategy.High[0] - strategy.Low[0];
@@ -55,7 +54,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     protected override void TrackAR()
     {
-        DrawPhaseLabel();
         if (strategy.High[0] > arExtreme)
             arExtreme = strategy.High[0];
 
@@ -95,7 +93,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     protected override void TrackPreSosRangeExtreme()
     {
-        DrawPhaseLabel();
         if (rangeExtremeLocked)
             return;
 
@@ -114,7 +111,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     protected override void CheckSOS()
     {
-        DrawPhaseLabel();
         if (!sosTriggered &&
             strategy.High[0] > arLocked)
         {
@@ -179,7 +175,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     protected override void ExecuteTrade()
     {
-        DrawPhaseLabel();
         strategy.EnterLong(1, "CORE_T1");
         strategy.EnterLong(1, "CORE_T2");
 
@@ -295,14 +290,17 @@ public class AccumulationEngine : BaseWyckoffEngine
                 break;
         }
 
+        double top = strategy.MAX(strategy.High, 50)[0];
+        double bottom = strategy.MIN(strategy.Low, 50)[0];
+
         strategy.Draw.Rectangle(
             strategy,
             tag,
             false,
-            50,                    // start bars ago
-            strategy.High[0] + 20, // top
-            0,                     // current bar
-            strategy.Low[0] - 20,  // bottom
+            50,
+            top,
+            0,
+            bottom,
             Brushes.Transparent,
             phaseBrush,
             1
@@ -311,7 +309,6 @@ public class AccumulationEngine : BaseWyckoffEngine
 
     private void DrawPhaseLabel()
     {
-        DrawPhaseShading();
         string tag = tagPrefix + "PHASE";
 
         strategy.Draw.TextFixed(

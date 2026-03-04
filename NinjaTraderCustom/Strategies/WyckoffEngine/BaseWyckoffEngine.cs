@@ -110,12 +110,7 @@ public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
 
     public void ProcessBar()
     {
-        if (Phase != StructurePhase.Searching &&
-            StructureInvalidated())
-        {
-            Reset();
-            return;
-        }
+        DrawPhaseLabel();
 
         switch (Phase)
         {
@@ -134,7 +129,8 @@ public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
                 break;
 
             case StructurePhase.WaitingForLPS:
-                CheckLPS();
+                if (EntrySignal())
+                    ExecuteTrade();
                 break;
         }
     }
