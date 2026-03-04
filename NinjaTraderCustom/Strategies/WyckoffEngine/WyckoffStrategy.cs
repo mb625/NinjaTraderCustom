@@ -144,6 +144,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 		{
 			if (CurrentBar < 50)
 				return;
+			if (BarsInProgress != 0)
+				return;
 
 			// ---------------------------
 			// Session reset

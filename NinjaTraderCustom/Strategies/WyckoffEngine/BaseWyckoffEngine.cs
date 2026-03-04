@@ -110,6 +110,7 @@ public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
 
     public void ProcessBar()
     {
+        strategy.Print($"{strategy.Time[0]} {Direction} Phase: {Phase}");
         DrawPhaseLabel();
 
         switch (Phase)
