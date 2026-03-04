@@ -341,6 +341,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 Brushes.Black,
                 Brushes.Black,
                 0
+                
             );
         }
     }

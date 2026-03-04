@@ -139,6 +139,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 				entryPrice = 0;
 			}
 		}
+		
 
 		protected override void OnBarUpdate()
 		{

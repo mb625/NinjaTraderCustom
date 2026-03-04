@@ -1,65 +1,70 @@
-public class StructureCoordinator
+using NinjaTrader.NinjaScript.Strategies;
+
+namespace NinjaTrader.NinjaScript.Strategies
 {
-    public StructureDirection ActiveDirection { get; private set; }
-    public AccumulationEngine Accumulation => accumulation;
-    public DistributionEngine Distribution => distribution;
-    private readonly IWyckoffStructureEngine accumulation;
-    private readonly IWyckoffStructureEngine distribution;
-
-    public StructureDirection ActiveDirection { get; private set; }
-
-    public StructureCoordinator(
-        IWyckoffStructureEngine accumulation,
-        IWyckoffStructureEngine distribution)
+    public class StructureCoordinator
     {
-        this.accumulation = accumulation;
-        this.distribution = distribution;
-        ActiveDirection = StructureDirection.None;
-    }
+        public StructureDirection ActiveDirection { get; private set; }
+        public AccumulationEngine Accumulation => accumulation;
+        public DistributionEngine Distribution => distribution;
+        private readonly IWyckoffStructureEngine accumulation;
+        private readonly IWyckoffStructureEngine distribution;
 
-    public void Process()
-    {
-        if (ActiveDirection == StructureDirection.None)
+        public StructureDirection ActiveDirection { get; private set; }
+
+        public StructureCoordinator(
+            IWyckoffStructureEngine accumulation,
+            IWyckoffStructureEngine distribution)
         {
-            accumulation.ProcessBar();
-            distribution.ProcessBar();
-
-            if (accumulation.HasConfirmedBreak())
-                Activate(StructureDirection.Accumulation);
-
-            else if (distribution.HasConfirmedBreak())
-                Activate(StructureDirection.Distribution);
+            this.accumulation = accumulation;
+            this.distribution = distribution;
+            ActiveDirection = StructureDirection.None;
         }
-        else if (ActiveDirection == StructureDirection.Accumulation)
+
+        public void Process()
         {
-            accumulation.ProcessBar();
+            if (ActiveDirection == StructureDirection.None)
+            {
+                accumulation.ProcessBar();
+                distribution.ProcessBar();
 
-            if (accumulation.IsInvalidated())
-                ResetAll();
+                if (accumulation.HasConfirmedBreak())
+                    Activate(StructureDirection.Accumulation);
+
+                else if (distribution.HasConfirmedBreak())
+                    Activate(StructureDirection.Distribution);
+            }
+            else if (ActiveDirection == StructureDirection.Accumulation)
+            {
+                accumulation.ProcessBar();
+
+                if (accumulation.IsInvalidated())
+                    ResetAll();
+            }
+            else if (ActiveDirection == StructureDirection.Distribution)
+            {
+                distribution.ProcessBar();
+
+                if (distribution.IsInvalidated())
+                    ResetAll();
+            }
         }
-        else if (ActiveDirection == StructureDirection.Distribution)
+
+        private void Activate(StructureDirection direction)
         {
-            distribution.ProcessBar();
+            ActiveDirection = direction;
 
-            if (distribution.IsInvalidated())
-                ResetAll();
+            if (direction == StructureDirection.Accumulation)
+                distribution.Reset();
+            else
+                accumulation.Reset();
         }
-    }
 
-    private void Activate(StructureDirection direction)
-    {
-        ActiveDirection = direction;
-
-        if (direction == StructureDirection.Accumulation)
-            distribution.Reset();
-        else
+        private void ResetAll()
+        {
             accumulation.Reset();
-    }
-
-    private void ResetAll()
-    {
-        accumulation.Reset();
-        distribution.Reset();
-        ActiveDirection = StructureDirection.None;
+            distribution.Reset();
+            ActiveDirection = StructureDirection.None;
+        }
     }
 }

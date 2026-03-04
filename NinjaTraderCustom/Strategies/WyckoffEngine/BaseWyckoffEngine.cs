@@ -1,17 +1,29 @@
-using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
-using NinjaTrader.NinjaScript.DrawingTools;
-using System.Windows.Media;
-public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
+
+namespace NinjaTrader.NinjaScript.Strategies
 {
-    protected readonly Strategy strategy;
+    public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
+    {
+        protected readonly Strategy strategy;
 
-    public abstract StructureDirection Direction { get; }
+        public abstract StructureDirection Direction { get; }
 
-    public StructurePhase Phase { get; protected set; }
+        public StructurePhase Phase { get; protected set; }
 
-    public bool IsActive => Phase != StructurePhase.Searching;
-    public bool IsInTradePhase => Phase == StructurePhase.InTrade;
+        public bool IsActive => Phase != StructurePhase.Searching;
+        public bool IsInTradePhase => Phase == StructurePhase.InTrade;
+
+        protected BaseWyckoffEngine(Strategy strategy)
+        {
+            this.strategy = strategy;
+        }
+
+        public abstract void Reset();
+
+        public abstract void ProcessBar();
+    }
+}
+
 
     // ==============================
     // PHASE A STRUCTURE
