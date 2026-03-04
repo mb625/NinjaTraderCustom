@@ -1,3 +1,7 @@
+using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.Strategies;
+using NinjaTrader.NinjaScript.DrawingTools;
+using System.Windows.Media;
 public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
 {
     protected readonly Strategy strategy;
@@ -134,6 +138,18 @@ public abstract class BaseWyckoffEngine : IWyckoffStructureEngine
                     ExecuteTrade();
                 break;
         }
+    }
+
+    protected void DrawPhaseLabel()
+    {
+        Draw.Text(
+            strategy,
+            "phase" + strategy.CurrentBar + Direction,
+            $"{Direction} {Phase}",
+            0,
+            strategy.High[0] + strategy.TickSize * 10,
+            Brushes.White
+        );
     }
 
     // =========================================================
